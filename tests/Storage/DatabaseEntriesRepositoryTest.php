@@ -2,6 +2,7 @@
 
 namespace Laravel\Telescope\Tests\Storage;
 
+use Illuminate\Database\Query\Grammars\MySqlGrammar;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Telescope\Database\Factories\EntryModelFactory;
@@ -92,6 +93,37 @@ class DatabaseEntriesRepositoryTest extends FeatureTestCase
 
         foreach ($deletes as $sql) {
             $this->assertStringContainsString('order by', $sql);
+        }
+    }
+
+    public function test_exception_index_updates_are_ordered_to_avoid_deadlocks()
+    {
+        $batchId = Str::uuid();
+        $exception = new \Exception('message');
+        $entry = (new IncomingExceptionEntry($exception, [
+            'file' => $exception->getFile(),
+            'line' => $exception->getLine(),
+            'message' => $exception->getMessage(),
+        ]))->batchId($batchId)->type(EntryType::EXCEPTION);
+
+        $connection = DB::connection('testbench');
+        $grammar = $connection->getQueryGrammar();
+        $connection->setQueryGrammar(new MySqlGrammar($connection));
+
+        try {
+            $queries = $connection->pretend(function () use ($entry) {
+                (new DatabaseEntriesRepository('testbench'))->store(collect([$entry]));
+            });
+        } finally {
+            $connection->setQueryGrammar($grammar);
+        }
+
+        $updates = collect($queries)->pluck('query')->filter(fn ($sql) => str_starts_with($sql, 'update'));
+
+        $this->assertNotEmpty($updates);
+
+        foreach ($updates as $sql) {
+            $this->assertStringContainsString('order by `sequence` asc', $sql);
         }
     }
 

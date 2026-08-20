@@ -168,6 +168,7 @@ class DatabaseEntriesRepository implements Contract, ClearableRepository, Prunab
                         ->where('type', EntryType::EXCEPTION)
                         ->where('family_hash', $exception->familyHash())
                         ->where('should_display_on_index', true)
+                        ->orderBy('sequence')
                         ->update(['should_display_on_index' => false]);
 
                 return array_merge($exception->toArray(), [
