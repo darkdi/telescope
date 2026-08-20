@@ -38,11 +38,25 @@ class InstallCommand extends Command
         $this->callSilent('vendor:publish', ['--tag' => 'telescope-config']);
 
         $this->comment('Publishing Telescope Migrations...');
-        $this->callSilent('vendor:publish', ['--tag' => 'telescope-migrations']);
+        $this->publishMigrations();
 
         $this->registerTelescopeServiceProvider();
 
         $this->info('Telescope scaffolding installed successfully.');
+    }
+
+    /**
+     * Publish the Telescope migrations if they have not already been published.
+     *
+     * @return void
+     */
+    protected function publishMigrations()
+    {
+        if (! empty(glob(database_path('migrations/*_create_telescope_entries_table.php')))) {
+            return;
+        }
+
+        $this->callSilent('vendor:publish', ['--tag' => 'telescope-migrations']);
     }
 
     /**
