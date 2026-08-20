@@ -2,6 +2,7 @@
 
 namespace Laravel\Telescope\Tests\Telescope;
 
+use Illuminate\Events\CallQueuedListener;
 use Illuminate\Mail\Mailable;
 use Laravel\Telescope\Database\Factories\EntryModelFactory;
 use Laravel\Telescope\ExtractTags;
@@ -40,6 +41,15 @@ class ExtractTagTest extends FeatureTestCase
 
         $this->assertSame($tag, $extracted_tag[0]);
     }
+
+    public function test_extract_tags_from_queued_listener_with_event_argument()
+    {
+        $event = new DummyQueuedEvent('shipment');
+        $job = new CallQueuedListener(DummyQueuedListener::class, 'handle', [$event]);
+
+        $this->assertSame(['event:shipment'], ExtractTags::fromJob($job));
+        $this->assertSame(['no-event'], ExtractTags::from(new DummyTaggable));
+    }
 }
 
 class DummyMailableWithData extends Mailable
@@ -59,5 +69,28 @@ class DummyMailableWithData extends Mailable
             ->with([
                 'mail_data' => $this->mail_data,
             ]);
+    }
+}
+
+class DummyQueuedEvent
+{
+    public function __construct(public string $name)
+    {
+    }
+}
+
+class DummyQueuedListener
+{
+    public function tags(DummyQueuedEvent $event): array
+    {
+        return ['event:'.$event->name];
+    }
+}
+
+class DummyTaggable
+{
+    public function tags($event = null): array
+    {
+        return [$event === null ? 'no-event' : 'stale-event'];
     }
 }

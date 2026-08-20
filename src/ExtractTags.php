@@ -14,6 +14,13 @@ use stdClass;
 class ExtractTags
 {
     /**
+     * The event that was last handled.
+     *
+     * @var object|null
+     */
+    protected static $event;
+
+    /**
      * Get the tags for the given object.
      *
      * @param  mixed  $target
@@ -83,11 +90,16 @@ class ExtractTags
      */
     protected static function tagsForListener($job)
     {
-        return collect(
-            [static::extractListener($job), static::extractEvent($job)]
-        )->map(function ($job) {
-            return static::from($job);
-        })->collapse()->unique()->toArray();
+        $event = static::extractEvent($job);
+
+        static::setEvent($event);
+
+        return collect([static::extractListener($job), $event])
+            ->map(function ($job) {
+                return static::from($job);
+            })->collapse()->unique()->tap(function () {
+                static::flushEventState();
+            })->toArray();
     }
 
     /**
@@ -99,7 +111,7 @@ class ExtractTags
     protected static function explicitTags(array $targets)
     {
         return collect($targets)->map(function ($target) {
-            return method_exists($target, 'tags') ? $target->tags() : [];
+            return method_exists($target, 'tags') ? $target->tags(static::$event) : [];
         })->collapse()->unique()->all();
     }
 
@@ -165,6 +177,27 @@ class ExtractTags
         return isset($job->data[0]) && is_object($job->data[0])
             ? $job->data[0]
             : new stdClass;
+    }
+
+    /**
+     * Set the event currently being handled.
+     *
+     * @param  object  $event
+     * @return void
+     */
+    protected static function setEvent($event)
+    {
+        static::$event = $event;
+    }
+
+    /**
+     * Flush the event currently being handled.
+     *
+     * @return void
+     */
+    protected static function flushEventState()
+    {
+        static::$event = null;
     }
 
     /**
